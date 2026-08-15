@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanner Real-Time - Futures Bot Quantic</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body { background-color: #000000 !important; color: #f3f4f6 !important; font-family: ui-sans-serif, system-ui, sans-serif; padding: 24px; margin: 0; }
+.max-w-6xl { max-width: 1150px; margin: 0 auto; }
+.header-lux { display: flex; justify-content: space-between; align-items: center; padding-top: 24px; padding-bottom: 24px; border-bottom: 1px solid #111827; margin-bottom: 32px; }
+.title-neon { font-size: 20px; font-weight: 900; color: #4ade80; letter-spacing: 0.05em; margin: 0; }
+.sub-lux { font-size: 9px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 4px; }
+.nav-layout { display: flex; gap: 8px; margin-top: 12px; font-family: monospace; }
+.nav-btn { font-size: 10px; text-transform: uppercase; font-weight: 900; padding: 6px 12px; border-radius: 8px; border: 1px solid #1f2937; text-decoration: none; display: inline-block; transition: all 0.3s ease; }
+.btn-extrato { background-color: #111827; color: #9ca3af; }
+.btn-scanner { background-color: #052e16; color: #4ade80; border-color: #166534; box-shadow: 0 4px 12px rgba(34,197,94,0.15); }
+.scanner-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; background-color: #052e16; color: #4ade80; border: 1px solid #166534; padding: 6px 16px; border-radius: 9999px; letter-spacing: 0.1em; animation: pulse 2s infinite; font-family: monospace; }
+.grid-layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+.card-lux { background-color: rgba(17, 24, 39, 0.3) !important; padding: 16px; border-radius: 16px; border: 1px solid rgba(31, 41, 55, 0.8) !important; display: flex; flex-direction: column; justify-content: space-between; transition: all 0.3s ease; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); backdrop-filter: blur(12px); }
+.neon-card-active { border-color: #22c55e !important; box-shadow: 0 0 25px rgba(34, 197, 94, 0.25) !important; cursor: pointer; }
+.badge-active { background-color: #052e16 !important; color: #4ade80 !important; border-color: #166534 !important; }
+.card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.crypto-title { font-size: 18px; font-weight: 900; color: #ffffff; font-family: monospace; margin: 0; display: flex; align-items: center; gap: 10px; }
+.macro-badge { font-size: 10px; font-weight: 900; border: 1px solid #1f2937; background-color: rgba(3, 7, 18, 0.6); padding: 4px 10px; border-radius: 6px; text-transform: uppercase; color: #4ade80; font-family: monospace; }
+.neon-lamp-off { background-color: #09090b; border: 1px solid #1f2937; color: #4b5563; padding: 12px; border-radius: 12px; text-align: center; font-family: monospace; font-size: 10px; font-weight: 900; box-shadow: inset 0 0 10px rgba(0,0,0,0.9); transition: all 0.5s ease; display: flex; flex-direction: column; gap: 2px; }
+.neon-lamp-long { background-color: #052e16; color: #4ade80; border: 1px solid #22c55e; box-shadow: 0 0 15px #22c55e, inset 0 0 5px #4ade80; text-shadow: 0 0 5px #22c55e; padding: 12px; border-radius: 12px; text-align: center; font-family: monospace; font-size: 10px; font-weight: 900; display: flex; flex-direction: column; gap: 2px; }
+.neon-lamp-short { background-color: #450a0a; color: #f87171; border: 1px solid #ef4444; box-shadow: 0 0 15px #ef4444, inset 0 0 5px #f87171; text-shadow: 0 0 5px #ef4444; padding: 12px; border-radius: 12px; text-align: center; font-family: monospace; font-size: 10px; font-weight: 900; display: flex; flex-direction: column; gap: 2px; }
+.led-row { display: flex; gap: 3px; justify-content: space-between; margin-top: 6px; width: 100%; }
+.led-v { height: 8px; border-radius: 1px; background-color: #09090b; border: 1px solid #1f2937; flex-grow: 1; transition: all 0.3s ease; }
+.led-on-v { background-color: #22c55e !important; border-color: #4ade80 !important; box-shadow: 0 0 8px #22c55e !important; }
+.led-on-c { background-color: #3b82f6 !important; border-color: #60a5fa !important; box-shadow: 0 0 8px #3b82f6 !important; }
+.box-embedded { background-color: rgba(3, 7, 18, 0.7); border: 1px solid #111827; border-radius: 14px; padding: 12px; margin-bottom: 14px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.6); }
+.box-label { display: flex; justify-content: space-between; font-size: 10px; font-weight: 900; text-transform: uppercase; font-family: monospace; color: #9ca3af; margin-bottom: 6px; }
+.grid-badges { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 14px; border-top: 1px solid #111827; padding-top: 14px; font-family: monospace; }
+.badge-btn { display: flex; align-items: center; gap: 6px; border: 1px solid #111827; background-color: rgba(3,7,18,0.4); padding: 8px; border-radius: 12px; color: #4b5563; transition: all 0.3s ease; cursor: pointer; }
+.badge-btn:hover { border-color: #374151; background-color: rgba(31,41,55,0.2); }
+.feed-texto { background-color: rgba(0,0,0,0.8); padding: 14px; border-radius: 12px; border: 1px solid #111827; font-size: 11px; font-family: monospace; color: #4ade80; line-height: 1.6; min-height: 48px; display: flex; align-items: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); }
+.modal-blur { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.9); backdrop-filter: blur(16px); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 100; }
+.vector-long { color: #4ade80 !important; font-weight: 900; text-shadow: 0 0 10px #22c55e; animation: pulse 1.5s infinite; }
+.vector-short { color: #f87171 !important; font-weight: 900; text-shadow: 0 0 10px #ef4444; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.icon-tv-lux { font-size: 18px !important; text-decoration: none; display: inline-block; vertical-align: middle; transition: all 0.2s; filter: drop-shadow(0 0 2px rgba(96,165,250,0.4)); margin-left: 6px; color: #3b82f6; }
+.icon-tv-lux:hover { filter: drop-shadow(0 0 8px #3b82f6); transform: scale(1.15); }
+.led-pnl-v { background-color: #22c55e !important; border-color: #4ade80 !important; box-shadow: 0 0 8px #22c55e !important; }
+.led-pnl-r { background-color: #ef4444 !important; border-color: #f87171 !important; box-shadow: 0 0 8px #ef4444 !important; }
+.led-ctrl-btn { background-color: #030712; border: 1px solid #1f2937; color: #4b5563; font-size: 10px; font-weight: 900; padding: 10px 4px; border-radius: 8px; text-transform: uppercase; text-align: center; font-family: monospace; transition: all 0.3s ease; }
+.badge-status-mestre { font-size: 9px; font-weight: 900; background-color: rgba(3,7,18,0.8); border: 1px solid #374151; color: #9ca3af; padding: 4px 12px; border-radius: 6px; text-transform: uppercase; font-family: monospace; letter-spacing: 0.05em; display: inline-block; }
+.modo-tendencia { border-color: #22c55e !important; color: #22c55e !important; background-color: rgba(34,197,94,0.05) !important; box-shadow: 0 0 10px rgba(34,197,94,0.15); }
+.modo-lateral { border-color: #ef4444 !important; color: #ef4444 !important; background-color: rgba(239,68,68,0.05) !important; box-shadow: 0 0 10px rgba(239,68,68,0.15); }
+.modo-reversao { border-color: #eab308 !important; color: #eab308 !important; background-color: rgba(234,179,8,0.05) !important; box-shadow: 0 0 10px rgba(234,179,8,0.15); }
+.badge-velas-active { background-color: rgba(234,179,8,0.1) !important; color: #eab308 !important; border-color: #eab308 !important; box-shadow: 0 0 12px rgba(234,179,8,0.2); }
+.trilho-leds-segmentados { display: flex; gap: 4px; justify-content: space-between; margin-top: 6px; width: 100%; }
+.led-segmento { height: 10px; border-radius: 2px; background-color: #030712; border: 1px solid #1f2937; flex-grow: 1; transition: all 0.3s ease; }
+.led-centro-zero { width: 3px; height: 14px; background-color: #ffffff; border-radius: 1px; }
+</style>
+</head>
+<body>
+<div class="max-w-6xl">
+<header class="header-lux">
+<div>
+<h1 class="title-neon">CENTRAL DE MONITORAMENTO QUANTITATIVO</h1>
+<p class="sub-lux">Auditoria Educativa de Requisitos em Tempo Real (v9.5 PRO)</p>
+<div class="nav-layout">
+<a href="/dashboard/1" class="nav-btn btn-extrato">Meu Extrato</a>
+<a href="/monitoramento" class="nav-btn btn-scanner">Scanner Ao Vivo</a>
+</div>
+</div>
+<span class="scanner-badge">Scanner Ativo</span>
+</header>
+
+<div class="grid-layout">
+{% for m in dados %}
+{% set id_limpo = m.ativo|trim %}
+<div id="card-{{ id_limpo }}" onclick="abrirModalTrade('{{ m.ativo }}')" class="card-lux">
+<div>
+<div class="card-head">
+<div style="display: flex; align-items: center; gap: 8px; width: 100%; justify-content: space-between;">
+<div style="display: flex; align-items: center; gap: 8px;">
+<img src="https://anynohzesgrqveogfxjb.supabase.co/storage/v1/object/public/logos-cripto/{{ id_limpo|upper }}.png" onerror="this.src='https://anynohzesgrqveogfxjb.supabase.co/storage/v1/object/public/logos-cripto/BTCUSDT.png'" style="width: 24px; height: 24px; border-radius: 50%; object-fit: contain; filter: drop-shadow(0 0 4px rgba(255,255,255,0.15));">
+<h2 class="crypto-title" style="display: inline-block; vertical-align: middle; margin: 0; font-family: monospace;">{{ m.ativo }}</h2>
+<a href="https://www.tradingview.com/chart/?symbol=BINANCE:{{ id_limpo }}.P" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation();" class="icon-tv-lux" title="Abrir Gráfico Oficial Futures">📈</a>
+</div>
+<span id="macro-{{ id_limpo }}" class="macro-badge">Macro: {{ m.tendencia_macro }}</span>
+</div>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; margin-bottom: 12px;">
+<span class="badge-status-mestre">Status Operacional em Tempo Real</span>
+<span id="badge-alerta-{{ id_limpo }}" class="scanner-badge modo-tendencia">MODO TENDÊNCIA</span>
+</div>
+
+<div id="lampada-{{ id_limpo }}" class="neon-lamp-off">
+<span id="lamp-status-{{ id_limpo }}">AGUARDANDO REQUISITOS INSTITUCIONAIS</span>
+<span style="font-size: 8px; opacity: 0.4; font-weight: 500; text-transform: none;" id="lamp-sub-{{ id_limpo }}">Análise de fluxo em standby</span>
+</div>
+
+<!-- CONTROLE OPERACIONAL DO CARD PRINCIPAL -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 12px; margin-bottom: 12px;">
+<div class="led-ctrl-btn" id="ctrl-led-entrada-{{ id_limpo }}">ENTRADA</div>
+<div class="led-ctrl-btn" id="ctrl-led-be-{{ id_limpo }}">B-EVEN</div>
+<div class="led-ctrl-btn" id="ctrl-led-alvo-{{ id_limpo }}">ALVO</div>
+<div class="led-ctrl-btn" id="ctrl-led-stop-{{ id_limpo }}">STOP</div>
+</div>
+
+<!-- RÉGUA PATRIMONIAL -->
+<div class="box-embedded" style="margin-bottom: 14px; padding: 10px 12px;">
+<div style="display: flex; justify-content: space-between; font-size: 8px; font-weight: bold; color: #4b5563; font-family: monospace; text-transform: uppercase; margin-bottom: 4px;">
+<span style="color: #ef4444;">LOSS (-5)</span>
+<span style="color: #60a5fa;">PONTO ZERO</span>
+<span style="color: #22c55e;">ALVO (+5)</span>
+</div>
+<div class="trilho-leds-segmentados" style="align-items: center;">
+<div class="led-segmento" id="led-pnl-r-{{ id_limpo }}-5"></div>
+<div class="led-segmento" id="led-pnl-r-{{ id_limpo }}-4"></div>
+<div class="led-segmento" id="led-pnl-r-{{ id_limpo }}-3"></div>
+<div class="led-segmento" id="led-pnl-r-{{ id_limpo }}-2"></div>
+<div class="led-segmento" id="led-pnl-r-{{ id_limpo }}-1"></div>
+<div class="led-centro-zero" id="led-pnl-zero-{{ id_limpo }}"></div>
+<div class="led-segmento" id="led-pnl-v-{{ id_limpo }}-1"></div>
+<div class="led-segmento" id="led-pnl-v-{{ id_limpo }}-2"></div>
+<div class="led-segmento" id="led-pnl-v-{{ id_limpo }}-3"></div>
+<div class="led-segmento" id="led-pnl-v-{{ id_limpo }}-4"></div>
+<div class="led-segmento" id="led-pnl-v-{{ id_limpo }}-5"></div>
+</div>
+</div>
+
+<!-- FLUXÔMETRO DE VOLUME -->
+<div class="box-embedded" style="margin-bottom: 14px;">
+<div class="box-label">
+<span>Fluxômetro de Volume Institucional</span>
+<span id="vol-val-{{ id_limpo }}" style="color: #4ade80; font-weight: bold;">1.00x</span>
+</div>
+<div class="led-row">
+<div class="led-v" id="led-v-{{ id_limpo }}-1"></div>
+<div class="led-v" id="led-v-{{ id_limpo }}-2"></div>
+<div class="led-v" id="led-v-{{ id_limpo }}-3"></div>
+<div class="led-v" id="led-v-{{ id_limpo }}-4"></div>
+<div class="led-v" id="led-v-{{ id_limpo }}-5"></div>
+<div class="led-v" id="led-v-{{ id_limpo }}-6"></div>
+<div class="led-v" id="led-v-{{ id_limpo }}-7"></div>
+<div class="led-v" id="led-v-{{ id_limpo }}-8"></div>
+<div class="led-v" id="led-v-{{ id_limpo }}-9"></div>
+<div class="led-v" id="led-v-{{ id_limpo }}-10"></div>
+</div>
+</div>
+
+<!-- TERMÔMETRO DE CONVERGÊNCIA -->
+<div class="box-embedded">
+<div class="box-label">
+<span>Termômetro de Convergência</span>
+<span id="pct-{{ id_limpo }}" style="color: #3b82f6; font-weight: 900;">0%</span>
+</div>
+<div class="led-row">
+<div class="led-v" id="led-c-{{ id_limpo }}-1" style="height: 10px;"></div>
+<div class="led-v" id="led-c-{{ id_limpo }}-2" style="height: 10px;"></div>
+<div class="led-v" id="led-c-{{ id_limpo }}-3" style="height: 10px;"></div>
+<div class="led-v" id="led-c-{{ id_limpo }}-4" style="height: 10px;"></div>
+</div>
+</div>
+
+<!-- SCANNER DE INTELIGÊNCIA DE VELAS -->
+<div class="box-embedded" style="margin-bottom: 14px; border-color: rgba(234,179,8,0.2);">
+<div class="box-label"><span style="color:#eab308;">Scanner de Inteligência de Velas</span></div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-family: monospace; font-size: 10px;">
+<div id="pnl-pinbar-{{ id_limpo }}" class="led-ctrl-btn" style="padding: 6px 2px;">PIN BAR</div>
+<div id="pnl-engolfo-{{ id_limpo }}" class="led-ctrl-btn" style="padding: 6px 2px;">ENGOLFO</div>
+<div id="pnl-inside-{{ id_limpo }}" class="led-ctrl-btn" style="padding: 6px 2px;">INSIDE BAR</div>
+<div id="pnl-orderblock-{{ id_limpo }}" class="led-ctrl-btn" style="padding: 6px 2px;">BLOCK/FVG</div>
+</div>
+</div>
+
+<div class="grid-badges">
+<div id="badge-ema-{{ id_limpo }}" onclick="exibirPrestacaoContas('{{ m.ativo }}', 'EMA')" class="badge-btn">EMA-50 <span id="chk-ema-{{ id_limpo }}">X</span></div>
+<div id="badge-bb-{{ id_limpo }}" onclick="exibirPrestacaoContas('{{ m.ativo }}', 'KELTNER')" class="badge-btn">Keltner <span id="chk-bb-{{ id_limpo }}">X</span></div>
+<div id="badge-rsi-{{ id_limpo }}" onclick="exibirPrestacaoContas('{{ m.ativo }}', 'RSI')" class="badge-btn">RSI-14 <span id="chk-rsi-{{ id_limpo }}">X</span></div>
+<div id="badge-macd-{{ id_limpo }}" onclick="exibirPrestacaoContas('{{ m.ativo }}', 'MACD')" class="badge-btn">MACD <span id="chk-macd-{{ id_limpo }}">X</span></div>
+<div id="badge-ao-{{ id_limpo }}" onclick="exibirPrestacaoContas('{{ m.ativo }}', 'AO')" class="badge-btn">AO Osc. <span id="chk-ao-{{ id_limpo }}">X</span></div>
+<div id="badge-cci-{{ id_limpo }}" onclick="exibirPrestacaoContas('{{ m.ativo }}', 'CCI')" class="badge-btn">Inst. CCI <span id="chk-cci-{{ id_limpo }}">X</span></div>
+</div>
+</div>
+
+<div class="feed-texto">
+<span id="txt-{{ id_limpo }}">Aguardando Telemetria...</span>
+</div>
+</div>
+{% endfor %}
+</div>
+</div>
+
+<!-- MODAL DE TELEMETRIA -->
+<div id="modal-trade" class="modal-blur" style="display: none;">
+<div style="background-color: #030712; border: 1px solid #1f2937; padding: 24px; border-radius: 24px; max-width: 420px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8); font-family: monospace; font-size: 13px;">
+<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #111827; padding-bottom: 12px; margin-bottom: 16px;">
+<h3 style="font-weight: 900; color: #ffffff; text-transform: uppercase; font-size: 13px; letter-spacing: 0.05em; margin: 0;">TELEMETRIA E INTEL PREDITIVA</h3>
+<button onclick="fecharModalTrade()" style="background: none; border: 0; color: #4b5563; cursor: pointer; font-size: 18px; font-weight: bold;">X</button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px; color: #d1d5db;">
+<p style="border-bottom: 1px solid #111827; padding-bottom: 8px;"><span style="color: #6b7280; font-weight: bold;">Paridade Técnico:</span> <span id="md-ativo" style="color: #ffffff; font-weight: bold; font-size: 14px; margin-left: 4px;"></span></p>
+<p style="border-bottom: 1px solid #111827; padding-bottom: 8px;"><span style="color: #6b7280; font-weight: bold;">Vetor de Direção:</span> <span id="md-direcao" style="margin-left: 4px; font-size: 14px;"></span></p>
+<p style="border-bottom: 1px solid #111827; padding-bottom: 8px;"><span style="color: #6b7280; font-weight: bold;">Preço Inicial Partida:</span> <span id="md-entrada" style="color: #ffffff; font-weight: bold; margin-left: 4px;"></span></p>
+<p style="border-bottom: 1px solid #111827; padding-bottom: 8px;"><span style="color: #4ade80; font-weight: bold;">Target Alvo (TP):</span> <span id="md-tp" style="color: #4ade80; font-weight: bold; margin-left: 4px;"></span></p>
+<p style="border-bottom: 1px solid #111827; padding-bottom: 8px;"><span style="color: #f87171; font-weight: bold;">Trava de Risco (SL):</span> <span id="md-sl" style="color: #f87171; font-weight: bold; margin-left: 4px;"></span></p>
+<p style="border-bottom: 1px solid #111827; padding-bottom: 8px;"><span style="color: #6b7280; font-weight: bold;">Modalidade Contract:</span> <span style="color: #ffffff; font-weight: bold; margin-left: 4px;">Binance Futures Cross</span></p>
+<p style="border-bottom: 1px solid #111827; padding-bottom: 8px;"><span style="color: #6b7280; font-weight: bold;">Alavancagem Margem:</span> <span style="color: #ffffff; font-weight: bold; margin-left: 4px;">20x Alocado Retido</span></p>
+<p style="border-bottom: 1px solid #111827; padding-bottom: 8px;"><span style="color: #6b7280; font-weight: bold;">Previsão de Duração:</span> <span id="md-tempo" style="color: #eab308; font-weight: bold; margin-left: 4px;"></span></p>
+</div>
+
+<div style="margin-top: 18px; border-top: 1px solid #111827; padding-top: 14px;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-family: monospace;">
+<span style="font-size: 10px; font-weight: 900; color: #3b82f6; text-transform: uppercase; letter-spacing: 0.05em;">Status Operacional em Tempo Real</span>
+<span id="md-badge-alerta" style="font-size: 8px; font-weight: 900; background-color: #000; border: 1px solid #4ade80; color: #4ade80; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">Mecanismo Sniper</span>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 14px; text-align: center;">
+<div class="led-ctrl-btn" id="md-ctrl-led-entrada">ENTRADA</div>
+<div class="led-ctrl-btn" id="md-ctrl-led-be">B-EVEN</div>
+<div class="led-ctrl-btn" id="md-ctrl-led-alvo">ALVO</div>
+<div class="led-ctrl-btn" id="md-ctrl-led-stop">STOP</div>
+</div>
+
+<div class="box-embedded" style="margin-bottom: 16px; padding: 10px 12px; background-color: #030712;">
+<div style="display: flex; justify-content: space-between; font-size: 8px; font-weight: bold; color: #4b5563; font-family: monospace; text-transform: uppercase; margin-bottom: 4px;">
+<span style="color: #ef4444;">LOSS (-5)</span>
+<span style="color: #60a5fa;">PONTO ZERO</span>
+<span style="color: #22c55e;">ALVO (+5)</span>
+</div>
+<div class="trilho-leds-segmentados" style="align-items: center;">
+<div class="led-segmento" id="md-led-pnl-r-5"></div>
+<div class="led-segmento" id="md-led-pnl-r-4"></div>
+<div class="led-segmento" id="md-led-pnl-r-3"></div>
+<div class="led-segmento" id="md-led-pnl-r-2"></div>
+<div class="led-segmento" id="md-led-pnl-r-1"></div>
+<div class="led-centro-zero" id="md-led-pnl-zero"></div>
+<div class="led-segmento" id="md-led-pnl-v-1"></div>
+<div class="led-segmento" id="md-led-pnl-v-2"></div>
+<div class="led-segmento" id="md-led-pnl-v-3"></div>
+<div class="led-segmento" id="md-led-pnl-v-4"></div>
+<div class="led-segmento" id="md-led-pnl-v-5"></div>
+</div>
+</div>
+</div>
+<button onclick="fecharModalTrade()" style="width: 100%; padding: 10px; background-color: #111827; color: #9ca3af; border: 1px solid #1f2937; border-radius: 12px; font-weight: bold; text-transform: uppercase; font-size: 11px; margin-top: 16px; cursor: pointer;">Fechar Painel</button>
+</div>
+</div>
+
+<!-- BALÃO DE PRESTAÇÃO DE CONTAS EDUCATIVA -->
+<div id="modal-prestacao" class="modal-blur" style="display: none; z-index: 110;">
+<div style="background-color: #040a15; border: 1px solid #3b82f6; padding: 20px; border-radius: 20px; max-width: 380px; width: 100%; font-family: monospace; font-size: 12px; box-shadow: 0 0 25px rgba(59,130,246,0.3);">
+<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #111827; padding-bottom: 10px; margin-bottom: 12px;">
+<h4 id="prest-titulo" style="font-weight: 900; color: #60a5fa; text-transform: uppercase; margin: 0; font-size: 13px;">AUDITORIA REAL-TIME</h4>
+<button onclick="fecharPrestacao()" style="background: none; border: 0; color: #4b5563; cursor: pointer; font-size: 16px;">X</button>
+</div>
+<div style="color: #e5e7eb; line-height: 1.6;" id="prest-corpo"></div>
+<button onclick="fecharPrestacao()" style="width: 100%; padding: 8px; background-color: #1e3a8a; color: #60a5fa; border: 1px solid #2563eb; border-radius: 10px; font-weight: bold; text-transform: uppercase; font-size: 11px; margin-top: 16px; cursor: pointer;">Entendido</button>
+</div>
+</div>
+
+<script>
+let bancoDadosLocal = {};
+let ativoSelecionadoModal = null;
+const memoriaEstadosTrades = {};
+let somCtx = null;
+
+function inicializarAudioCtx() {
+    if (!somCtx) somCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function tocarSomHft(tipo) {
+    inicializarAudioCtx();
+    if (!somCtx) return;
+    try {
+        const osc = somCtx.createOscillator();
+        const ganho = somCtx.createGain();
+        osc.connect(ganho);
+        ganho.connect(somCtx.destination);
+        if (tipo === 'entrada') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(587.33, somCtx.currentTime);
+            ganho.gain.setValueAtTime(0.12, somCtx.currentTime);
+            ganho.gain.exponentialRampToValueAtTime(0.01, somCtx.currentTime + 0.15);
+            osc.start(); osc.stop(somCtx.currentTime + 0.15);
+        } else if (tipo === 'be') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(880, somCtx.currentTime);
+            ganho.gain.setValueAtTime(0.1, somCtx.currentTime);
+            ganho.gain.exponentialRampToValueAtTime(0.01, somCtx.currentTime + 0.2);
+            osc.start(); osc.stop(somCtx.currentTime + 0.2);
+        } else if (tipo === 'alvo') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(1046.50, somCtx.currentTime);
+            ganho.gain.setValueAtTime(0.15, somCtx.currentTime);
+            ganho.gain.exponentialRampToValueAtTime(0.01, somCtx.currentTime + 0.3);
+            osc.start(); osc.stop(somCtx.currentTime + 0.3);
+        } else if (tipo === 'stop') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(130, somCtx.currentTime);
+            ganho.gain.setValueAtTime(0.15, somCtx.currentTime);
+            ganho.gain.exponentialRampToValueAtTime(0.01, somCtx.currentTime + 0.25);
+            osc.start(); osc.stop(somCtx.currentTime + 0.25);
+        }
+    } catch (e) { console.log(e); }
+}
+
+function abrirModalTrade(ativo) {
+    inicializarAudioCtx();
+    const idAtivo = ativo.trim();
+    const cardData = bancoDadosLocal[idAtivo];
+    if (!cardData) return;
+    const pct = parseInt(cardData.percentual) || 0;
+    if (pct >= 75) {
+        ativoSelecionadoModal = ativo;
+        document.getElementById('md-ativo').innerText = ativo;
+        const elDirecao = document.getElementById('md-direcao');
+        const macroStr = cardData.tendencia_macro || "COMPRA";
+        if (macroStr.includes("COMPRA") || macroStr.includes("LONG") || macroStr.includes("ALTA")) {
+            elDirecao.innerText = "COMPRA (LONG)";
+            elDirecao.className = "vector-long";
+        } else {
+            elDirecao.innerText = "VENDA (SHORT)";
+            elDirecao.className = "vector-short";
+        }
+
+        const txt = cardData.status_texto || "";
+        let p_ent = "Aguardando Varredura...", p_tp = "Calculando...", p_sl = "Calculando...";
+        const matchP = txt.match(/P:\s*([0-9.]+)/);
+        const matchTP = txt.match(/TP:\s*([0-9.]+)/);
+        const matchSL = txt.match(/SL:\s*([0-9.]+)/);
+
+        if(matchP) p_ent = `$${parseFloat(matchP[1]).toFixed(4)}`;
+        if(matchTP) p_tp = `$${parseFloat(matchTP[1]).toFixed(4)} (+34.00% NET)`;
+        if(matchSL) p_sl = `$${parseFloat(matchSL[1]).toFixed(4)} (-17.00% NET)`;
+
+        document.getElementById('md-entrada').innerText = p_ent;
+        document.getElementById('md-tp').innerText = p_tp;
+        document.getElementById('md-sl').innerText = p_sl;
+        document.getElementById('md-tempo').innerText = pct === 100 ? "05 a 15 minutos (Scalping ATR)" : "Standby de Ignição";
+        document.getElementById('modal-trade').style.display = 'flex';
+
+        if(window.ultimoFluxoCache) {
+            const textoUpper = txt.toUpperCase();
+            const emOperacao = textoUpper.includes("EM OPERAÇÃO") || textoUpper.includes("🚀");
+            atualizarPainelLedsERegua(idAtivo, cardData, textoUpper, emOperacao, "md-");
+        }
+    }
+}
+
+function fecharModalTrade() {
+    document.getElementById('modal-trade').style.display = 'none';
+    ativoSelecionadoModal = null;
+}
+
+function exibirPrestacaoContas(ativo, indicador) {
+    event.stopPropagation();
+    const idAtivo = ativo.trim();
+    const d = bancoDadosLocal[idAtivo];
+    if (!d) return;
+    let titulo = `${ativo} - Auditoria ${indicador}`;
+    let corpo = "";
+    if (indicador === 'EMA') {
+        corpo = d.c_ema === 'CHECK' ? `GATILHO ATIVO: O preço atual está navegando acima da EMA-50, confirmando fluxo comprador.` : `STANDBY: Preço abaixo da EMA-50, aguardando alinhamento de tendência.`;
+    } else if (indicador === 'KELTNER') {
+        corpo = d.c_bb === 'CHECK' ? `GATILHO ATIVO: Rompimento de expansão nos Canais de Keltner. Volatilidade a favor do fluxo.` : `STANDBY: O preço está comprimido dentro das zonas centrais do Keltner.`;
+    } else if (indicador === 'RSI') {
+        corpo = d.c_rsi === 'CHECK' ? `GATILHO ATIVO: RSI-14 sustentado acima de 50. Força compradora institucional ativa.` : `STANDBY: RSI-14 fraco ou abaixo de 50, fluxo de acumulação pendente.`;
+    } else if (indicador === 'MACD') {
+        corpo = d.c_macd === 'CHECK' ? `GATILHO ATIVO: Linha rápida do MACD cruzou acima da linha de sinal. Momentum comprador.` : `STANDBY: Sem velocidade de aceleração no histograma do MACD.`;
+    } else if (indicador === 'AO') {
+        corpo = d.c_ao === 'CHECK' ? `GATILHO ATIVO: Barras do Awesome Oscillator viraram para verde. Força cinética confirmada.` : `STANDBY: Awesome Oscillator em micro-compressão ou barras vermelhas.`;
+    } else if (indicador === 'CCI') {
+        corpo = d.c_cci === 'CHECK' ? `GATILHO ATIVO: CCI operando acima da zona estável, liberando o clique seguro.` : `STANDBY: CCI em exaustão ou mercado excessivamente lateralizado.`;
+    }
+    document.getElementById('prest-titulo').innerText = titulo;
+    document.getElementById('prest-corpo').innerText = corpo;
+    document.getElementById('modal-prestacao').style.display = 'flex';
+}
+
+function fecharPrestacao() { 
+    document.getElementById('modal-prestacao').style.display = 'none'; 
+}
+
+function atualizarPainelLedsERegua(idAtivo, m, textoUpper, emOperacao, sufixo = "") {
+    const ledEntrada = document.getElementById(`${sufixo}ctrl-led-entrada-${idAtivo}`);
+    const ledBe = document.getElementById(`${sufixo}ctrl-led-be-${idAtivo}`);
+    const ledAlvo = document.getElementById(`${sufixo}ctrl-led-alvo-${idAtivo}`);
+    const ledStop = document.getElementById(`${sufixo}ctrl-led-stop-${idAtivo}`);
+    const badgeAlerta = document.getElementById(`${sufixo}badge-alerta-${idAtivo}`);
+
+    if (badgeAlerta) {
+        badgeAlerta.classList.remove('modo-tendencia', 'modo-lateral', 'modo-reversao');
+        if (parseFloat(m.volume_razao) < 0.95 || textoUpper.includes("COMPRESSÃO") || textoUpper.includes("LATERAL")) {
+            badgeAlerta.innerText = "MODO LATERAL";
+            badgeAlerta.className = "scanner-badge modo-lateral";
+        } else if (m.c_pinbar === 'CHECK' || textoUpper.includes("REVERSÃO") || textoUpper.includes("PINBAR")) {
+            badgeAlerta.innerText = "MODO REVERSÃO";
+            badgeAlerta.className = "scanner-badge modo-reversao";
+        } else {
+            badgeAlerta.innerText = "MODO TENDÊNCIA";
+            badgeAlerta.className = "scanner-badge modo-tendencia";
+        }
+    }
+
+    if (sufixo === "") {
+        const elPin = document.getElementById(`pnl-pinbar-${idAtivo}`);
+        const elEng = document.getElementById(`pnl-engolfo-${idAtivo}`);
+        const elIns = document.getElementById(`pnl-inside-${idAtivo}`);
+        const elOb = document.getElementById(`pnl-orderblock-${idAtivo}`);
+
+        [elPin, elEng, elIns, elOb].forEach(el => el ? el.classList.remove('badge-velas-active') : null);
+        if (m.c_pinbar === 'CHECK' && elPin) elPin.classList.add('badge-velas-active');
+        if (m.c_engolfo === 'CHECK' && elEng) elEng.classList.add('badge-velas-active');
+        if (m.c_inside === 'CHECK' && elIns) elIns.classList.add('badge-velas-active');
+        if (m.c_orderblock === 'CHECK' && elOb) elOb.classList.add('badge-velas-active');
+    }
+
+    [ledEntrada, ledBe, ledAlvo, ledStop].forEach(el => {
+        if (el) el.style = "background-color: #030712; border: 1px solid #1f2937; color: #4b5563; font-size: 10px; font-weight: 900; padding: 10px 4px; border-radius: 8px; text-transform: uppercase; text-align: center; font-family: monospace;";
+    });
+
+    for (let i = 1; i <= 5; i++) {
+        const lv = document.getElementById(`${sufixo}led-pnl-v-${idAtivo}-${i}`);
+        const lr = document.getElementById(`${sufixo}led-pnl-r-${idAtivo}-${i}`);
+        if (lv) { lv.classList.remove('led-pnl-v'); lv.style.backgroundColor = ""; lv.style.boxShadow = ""; lv.style.borderColor = ""; }
+        if (lr) { lr.classList.remove('led-pnl-r'); lr.style.backgroundColor = ""; lr.style.boxShadow = ""; lr.style.borderColor = ""; }
+    }
+
+    let pctPercorrido = 0;
+    let estaTravado30s = false;
+
+    if (window[`trava30s_${idAtivo}`] && Date.now() < window[`trava30s_${idAtivo}`]) {
+        estaTravado30s = true;
+    }
+
+    if (emOperacao && m.status_texto) {
+        const matchP = m.status_texto.match(/P:\s*([0-9.]+)/);
+        const matchTP = m.status_texto.match(/TP:\s*([0-9.]+)/);
+        const matchSL = m.status_texto.match(/SL:\s*([0-9.]+)/);
+
+        if (matchP && matchTP && matchSL) {
+            const precoAtualWS = parseFloat(matchP[1]);
+            const pEntrada = parseFloat(matchP[1]);
+            const pTarget = parseFloat(matchTP[1]);
+            const pStop = parseFloat(matchSL[1]);
+            const distAlvo = Math.abs(pTarget - pEntrada);
+            const distStop = Math.abs(pEntrada - pStop);
+
+            if (distAlvo > 0 && distStop > 0) {
+                if (textoUpper.includes("LONG")) {
+                    if (precoAtualWS >= pEntrada) {
+                        pctPercorrido = ((precoAtualWS - pEntrada) / distAlvo) * 100;
+                    } else {
+                        pctPercorrido = -((pEntrada - precoAtualWS) / distStop) * 100;
+                    }
+                } else {
+                    if (precoAtualWS <= pEntrada) {
+                        pctPercorrido = ((pEntrada - precoAtualWS) / distAlvo) * 100;
+                    } else {
+                        pctPercorrido = -((precoAtualWS - pEntrada) / distStop) * 100;
+                    }
+                }
+            }
+        }
+    }
+
+    if (badgeAlerta && textoUpper.includes("ALERTA LOSS")) {
+        badgeAlerta.innerText = "ALERTA LOSS ATIVADO";
+        badgeAlerta.style.borderColor = "#ef4444";
+        badgeAlerta.style.color = "#ef4444";
+    }
+
+    if (emOperacao && !estaTravado30s) {
+        if (ledEntrada) ledEntrada.style = "background-color:#1e3a8a; border:1px solid #3b82f6; color:#fff; font-size: 10px; font-weight:900; padding: 10px 4px; border-radius:8px; text-transform:uppercase; box-shadow:0 0 10px #2563eb; font-family: monospace;";
+        if (sufixo === "" && (!memoriaEstadosTrades[m.ativo] || memoriaEstadosTrades[m.ativo] === "STANDBY")) {
+            tocarSomHft('entrada');
+            memoriaEstadosTrades[m.ativo] = "ABERTO";
+            window[`maxPct_${idAtivo}`] = 0;
+        }
+
+        if (pctPercorrido > 0 && pctPercorrido > (window[`maxPct_${idAtivo}`] || 0)) {
+            window[`maxPct_${idAtivo}`] = pctPercorrido;
+        }
+
+        const atingiuMetadeAlvo = (window[`maxPct_${idAtivo}`] || 0) >= 50;
+
+        if (atingiuMetadeAlvo) {
+            if (ledBe) ledBe.style = "background-color: #1d4ed8; border:1px solid #60a5fa; color:#fff; font-size:10px; font-weight:900; padding: 10px 4px; border-radius:8px; text-transform:uppercase; box-shadow:0 0 10px #3b82f6; font-family: monospace;";
+            if (sufixo === "" && memoriaEstadosTrades[m.ativo] !== "BE") {
+                tocarSomHft('be'); memoriaEstadosTrades[m.ativo] = "BE"; 
+            }
+        }
+
+        if (pctPercorrido >= 0) {
+            for (let i = 1; i <= 5; i++) {
+                const limiarGradual = i * 20;
+                const ledV = document.getElementById(`${sufixo}led-pnl-v-${idAtivo}-${i}`);
+                if (ledV) {
+                    if (pctPercorrido >= limiarGradual) {
+                        ledV.classList.add('led-pnl-v');
+                    } else if (limiarGradual === 60 && atingiuMetadeAlvo) {
+                        ledV.classList.remove('led-pnl-v');
+                        ledV.style.backgroundColor = '#3b82f6';
+                        ledV.style.boxShadow = '0 0 8px #3b82f6';
+                        ledV.style.borderColor = '#60a5fa';
+                    }
+                }
+            }
+        } else {
+            const quedaAbsoluta = Math.abs(pctPercorrido);
+            for (let i = 1; i <= 5; i++) {
+                const limiarQueda = i * 20;
+                const ledR = document.getElementById(`${sufixo}led-pnl-r-${idAtivo}-${i}`);
+                if (ledR) {
+                    if (quedaAbsoluta >= limiarQueda) {
+                        ledR.classList.add('led-pnl-r');
+                    }
+                }
+            }
+        }
+    } else if (estaTravado30s || textoUpper.includes("WIN") || textoUpper.includes("LOSS") || textoUpper.includes("STOP") || textoUpper.includes("BREAK_EVEN")) {
+        if (!window[`trava30s_${idAtivo}`] && emOperacao === false && (memoriaEstadosTrades[m.ativo] === "ABERTO" || memoriaEstadosTrades[m.ativo] === "BE")) {
+            window[`trava30s_${idAtivo}`] = Date.now() + 30000;
+            estaTravado30s = true;
+
+            if (textoUpper.includes("WIN")) { 
+                tocarSomHft('alvo'); memoriaEstadosTrades[m.ativo] = "WIN"; 
+            } else if (textoUpper.includes("LOSS")) { 
+                tocarSomHft('stop'); memoriaEstadosTrades[m.ativo] = "LOSS"; 
+            } else { 
+                tocarSomHft('be'); memoriaEstadosTrades[m.ativo] = "BREAK_EVEN"; 
+            }
+        }
+
+        if (estaTravado30s) {
+            const tempoRestante = Math.ceil((window[`trava30s_${idAtivo}`] - Date.now()) / 1000);
+            const txtFeed = document.getElementById(`txt-${idAtivo}`);
+            
+            if (memoriaEstadosTrades[m.ativo] === "WIN") {
+                if (ledAlvo) ledAlvo.style = "background-color:#064e3b; border:1px solid #4ade80; color:#fff; font-size: 10px; font-weight:900; padding:10px 4px; border-radius:8px; text-transform:uppercase; box-shadow:0 0 12px #22c55e; font-family: monospace; animation: pulse 0.5s infinite;";
+                if (txtFeed) { txtFeed.innerText = `ALVO INSTITUCIONAL ATINGIDO! AGUARDANDO PRÓXIMO CICLO EM ${tempoRestante}s...`; txtFeed.style.color = "#22c55e"; }
+            } else if (memoriaEstadosTrades[m.ativo] === "BE" || memoriaEstadosTrades[m.ativo] === "BREAK_EVEN") {
+                if (ledBe) ledBe.style = "background-color:#1d4ed8; border:1px solid #60a5fa; color:#fff; font-size:10px; font-weight:900; padding:10px 4px; border-radius:8px; text-transform:uppercase; box-shadow:0 0 10px #3b82f6; font-family: monospace; animation: pulse 0.5s infinite;";
+                if (txtFeed) { txtFeed.innerText = `PROTEÇÃO BREAK-EVEN EXECUTADA! REINICIANDO EM ${tempoRestante}s...`; txtFeed.style.color = "#3b82f6"; }
+            } else {
+                if (ledStop) ledStop.style = "background-color:#7f1d1d; border:1px solid #f87171; color:#fff; font-size: 10px; font-weight:900; padding: 10px 4px; border-radius:8px; text-transform:uppercase; box-shadow:0 0 12px #ef4444; font-family: monospace; animation: pulse 0.5s infinite;";
+                if (txtFeed) { txtFeed.innerText = `PROTEÇÃO GESTÃO DE RISCO: CONGELADO POR ${tempoRestante}s...`; txtFeed.style.color = "#ef4444"; }
+            }
+        }
+    }
+}
+
+const evtSource = new EventSource(window.location.origin + "/stream-monitoramento");
+evtSource.onmessage = function(event) {
+    if (!event.data || event.data.trim() === "") return;
+    try {
+        const dados = JSON.parse(event.data);
+        if (!Array.isArray(dados)) return;
+        window.ultimoFluxoCache = dados;
+
+        dados.forEach(m => {
+            if (!m || !m.ativo) return;
+            const idAtivo = m.ativo.trim();
+            bancoDadosLocal[idAtivo] = m;
+
+            const percentual = parseInt(m.percentual) || 0;
+            const volVal = m.volume_razao ? parseFloat(m.volume_razao).toFixed(2) : "1.00";
+            const score = parseInt(m.score_total) || 0;
+
+            if(document.getElementById(`pct-${idAtivo}`)) document.getElementById(`pct-${idAtivo}`).innerText = percentual + "%";
+            if(document.getElementById(`txt-${idAtivo}`)) document.getElementById(`txt-${idAtivo}`).innerText = m.status_texto || "Analisando mercado...";
+            if(document.getElementById(`vol-val-${idAtivo}`)) document.getElementById(`vol-val-${idAtivo}`).innerText = volVal + "x";
+            if(document.getElementById(`macro-${idAtivo}`)) document.getElementById(`macro-${idAtivo}`).innerText = "Macro: " + (m.tendencia_macro || "ALTA");
+
+            const vol = parseFloat(m.volume_razao) || 1.0;
+            for(let i = 1; i <= 10; i++) {
+                const led = document.getElementById(`led-v-${idAtivo}-${i}`);
+                if(led) {
+                    if(vol >= (i * 0.3)) led.classList.add('led-on-v');
+                    else led.classList.remove('led-on-v');
+                }
+            }
+
+            for(let i = 1; i <= 4; i++) {
+                const ledC = document.getElementById(`led-c-${idAtivo}-${i}`);
+                if(ledC) {
+                    if(score >= i) ledC.classList.add('led-on-c');
+                    else ledC.classList.remove('led-on-c');
+                }
+            }
+
+            const card = document.getElementById(`card-${idAtivo}`);
+            if (card) {
+                if(percentual >= 75) card.classList.add('neon-card-active');
+                else card.classList.remove('neon-card-active');
+            }
+
+            const renderBadge = (badgeId, chkId, status) => {
+                const el = document.getElementById(badgeId);
+                const chk = document.getElementById(chkId);
+                if(!el || !chk) return;
+                if(status === 'CHECK') {
+                    el.classList.add('badge-active');
+                    chk.innerText = "✓";
+                } else {
+                    el.classList.remove('badge-active');
+                    chk.innerText = "X";
+                }
+            };
+
+            renderBadge(`badge-ema-${idAtivo}`, `chk-ema-${idAtivo}`, m.c_ema);
+            renderBadge(`badge-bb-${idAtivo}`, `chk-bb-${idAtivo}`, m.c_bb);
+            renderBadge(`badge-rsi-${idAtivo}`, `chk-rsi-${idAtivo}`, m.c_rsi);
+            renderBadge(`badge-macd-${idAtivo}`, `chk-macd-${idAtivo}`, m.c_macd);
+            renderBadge(`badge-ao-${idAtivo}`, `chk-ao-${idAtivo}`, m.c_ao);
+            renderBadge(`badge-cci-${idAtivo}`, `chk-cci-${idAtivo}`, m.c_cci);
+
+            const lampada = document.getElementById(`lampada-${idAtivo}`);
+            const lampStatus = document.getElementById(`lamp-status-${idAtivo}`);
+            const lampSub = document.getElementById(`lamp-sub-${idAtivo}`);
+
+            if (lampada && lampStatus && lampSub) {
+                lampada.classList.remove('neon-lamp-off', 'neon-lamp-long', 'neon-lamp-short');
+                const isLong = m.tendencia_macro && (m.tendencia_macro.includes('ALTA') || m.tendencia_macro.includes('COMPRA') || m.tendencia_macro.includes('LONG'));
+
+                if (percentual === 100) {
+                    if (isLong) {
+                        lampada.classList.add('neon-lamp-long');
+                        lampStatus.innerText = "DISPARO ENVIADO: EXECUÇÃO LONG 20X";
+                    } else {
+                        lampada.classList.add('neon-lamp-short');
+                        lampStatus.innerText = "DISPARO ENVIADO: EXECUÇÃO SHORT 20X";
+                    }
+                    lampSub.innerText = "Ordem mestre alocada. Clique no card para abrir telemetria...";
+                } else if (percentual === 75) {
+                    if (isLong) {
+                        lampada.classList.add('neon-lamp-long');
+                        lampStatus.innerText = "ALERTA: CONVERGÊNCIA COMPRADORA EM 75%";
+                    } else {
+                        lampada.classList.add('neon-lamp-short');
+                        lampStatus.innerText = "ALERTA: CONVERGÊNCIA VENDEDORA EM 75%";
+                    }
+                    lampSub.innerText = "Ganhando força. Clique no card para abrir previsão de alvo...";
+                } else {
+                    lampada.classList.add('neon-lamp-off');
+                    lampStatus.innerText = "AGUARDANDO REQUISITOS INSTITUCIONAIS";
+                    lampSub.innerText = "Análise de fluxo em standby (" + score + "/4 confirmados)";
+                }
+            }
+
+            const textoUpper = (m.status_texto || "").toUpperCase();
+            const emOperacao = textoUpper.includes("EM OPERAÇÃO") || textoUpper.includes("🚀");
+
+            atualizarPainelLedsERegua(idAtivo, m, textoUpper, emOperacao, "");
+            if (ativoSelecionadoModal === m.ativo) {
+                atualizarPainelLedsERegua(idAtivo, m, textoUpper, emOperacao, "md-");
+            }
+        });
+    } catch(e) { console.log("Erro no processamento do stream:", e); }
+};
+
+document.body.addEventListener('click', function() {
+    inicializarAudioCtx();
+    if (somCtx && somCtx.state === 'suspended') {
+        somCtx.resume();
+    }
+}, { once: true });
+</script>
+</body>
+</html>
