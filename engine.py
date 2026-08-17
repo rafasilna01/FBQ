@@ -65,13 +65,44 @@ HEADERS_SUPABASE = {
     "Prefer": "return=representation"
 }
 
-TIMEFRAME_SINAL = '5m'
-TIMEFRAME_MACRO = '30m'
+# Multi-timeframe architecture: entry signals, confirmation, regime detection
+TIMEFRAME_ENTRY = '5m'      # Fast entry signals
+TIMEFRAME_CONFIRM = '1h'     # Medium-term confirmation
+TIMEFRAME_REGIME = '4h'      # Market regime detection
+TIMEFRAME_MACRO = '1d'       # Macro trend context
 
 ATIVOS = [
     'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 
     'LINKUSDT', 'AVAXUSDT', 'ADAUSDT', 'NEARUSDT', 'RENDERUSDT'
 ]
+
+# Market regime definitions
+MARKET_REGIMES = {
+    'TRENDING_STRONG': {'leverage_min': 35, 'leverage_max': 50, 'target_min': 0.60, 'target_max': 0.85},
+    'TRENDING_MILD': {'leverage_min': 20, 'leverage_max': 35, 'target_min': 0.40, 'target_max': 0.60},
+    'CHOPPY_HIGH_VOL': {'leverage_min': 5, 'leverage_max': 15, 'target_min': 0.15, 'target_max': 0.30},
+    'CHOPPY_LOW_VOL': {'leverage_min': 10, 'leverage_max': 20, 'target_min': 0.20, 'target_max': 0.40},
+    'NEUTRAL': {'leverage_min': 15, 'leverage_max': 25, 'target_min': 0.25, 'target_max': 0.45},
+}
+
+# Multi-timeframe cache and regime tracking
+multiframe_cache = {}
+market_regime_global = 'NEUTRAL'
+
+# ==================================================================================
+# 🧠 PARÂMETROS OPERACIONAIS FBQ 24/7 (ALTA FREQUÊNCIA / DEMO MODE)
+# ==================================================================================
+
+FBQ_HIGH_FREQUENCY = {
+    'daily_trade_cap': 60,
+    'pair_count': len(ATIVOS),
+    'position_allocation_pct': 0.04,
+    'win_target_pct': 0.34,
+    'loss_protection_pct': 0.17,
+    'cognitive_break_even_active': True,
+    'scan_interval_seconds': 2,
+    'max_parallel_positions': 6,
+}
 
 # ==================================================================================
 # 🔌 CONEXÕES BINANCE DEMO MODE (SEM ENDPOINTS TESTNET ANTIGOS)
@@ -209,12 +240,126 @@ def atualizar_painel_realtime(payload):
 def calcular_lote_blindado_2pct(saldo_usdt, preco_ent, atr):
     if saldo_usdt < 20.0 or preco_ent <= 0 or atr <= 0: 
         return 0.0
-    risco_tolerado_usdt = saldo_usdt * 0.02
-    distancia_sl_nominal = atr
+    risco_tolerado_usdt = saldo_usdt * FBQ_HIGH_FREQUENCY['position_allocation_pct']
+    distancia_sl_nominal = max(atr, (preco_ent * FBQ_HIGH_FREQUENCY['loss_protection_pct']))
     if distancia_sl_nominal <= 0: 
         return 0.0
     qnt_contratos = risco_tolerado_usdt / distancia_sl_nominal
     return round(qnt_contratos, 3)
+
+
+def atualizar_break_even_cognitivo(ativo_limpo, direcao, preco_atual, entrada):
+    trade = trades_ativos_ram.get(ativo_limpo)
+    if not trade or not FBQ_HIGH_FREQUENCY['cognitive_break_even_active']:
+        return
+
+    ganho_relativo = (preco_atual - entrada) / entrada if entrada > 0 else 0.0
+    if direcao == 'LONG' and ganho_relativo >= (FBQ_HIGH_FREQUENCY['loss_protection_pct'] * 0.6):
+        trade['sl'] = entrada
+        trade['be_ativado'] = True
+    elif direcao == 'SHORT' and ganho_relativo <= -(FBQ_HIGH_FREQUENCY['loss_protection_pct'] * 0.6):
+        trade['sl'] = entrada
+        trade['be_ativado'] = True
+
+
+def detectar_regime_mercado(df, ativo):
+    """Detecta regime de mercado baseado em volatilidade, ADX e volume."""
+    if df is None or len(df) < 50:
+        return 'NEUTRAL'
+    
+    try:
+        atr = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14).average_true_range()
+        adx_val = ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=14).adx()
+        
+        atr_recent = atr.iloc[-1]
+        adx_recent = adx_val.iloc[-1]
+        vol_sma20 = df['volume'].rolling(20).mean().iloc[-1]
+        vol_atual = df['volume'].iloc[-1]
+        vol_ratio = vol_atual / vol_sma20 if vol_sma20 > 0 else 1.0
+        
+        # Lógica de regime: combinação de ADX, ATR e volume
+        if adx_recent > 30 and vol_ratio > 1.2:
+            return 'TRENDING_STRONG'
+        elif adx_recent > 25 and vol_ratio > 1.0:
+            return 'TRENDING_MILD'
+        elif adx_recent < 20 and vol_ratio > 1.3:
+            return 'CHOPPY_HIGH_VOL'
+        elif adx_recent < 20 and vol_ratio < 0.8:
+            return 'CHOPPY_LOW_VOL'
+        else:
+            return 'NEUTRAL'
+    except Exception:
+        return 'NEUTRAL'
+
+
+def calcular_leverage_dinamico(regime, volatilidade_relativa=1.0):
+    """Calcula leverage dinâmico (5x-50x) baseado no regime de mercado."""
+    if regime not in MARKET_REGIMES:
+        regime = 'NEUTRAL'
+    
+    config = MARKET_REGIMES[regime]
+    base_leverage = (config['leverage_min'] + config['leverage_max']) / 2
+    
+    # Ajusta based on volatility: lower vol = higher leverage, higher vol = lower leverage
+    if volatilidade_relativa > 1.3:
+        leverage = config['leverage_min']
+    elif volatilidade_relativa > 1.0:
+        leverage = base_leverage * 0.8
+    else:
+        leverage = config['leverage_max']
+    
+    return max(5, min(50, int(leverage)))
+
+
+def calcular_alvo_adaptativo(regime, preco_atual, direcao):
+    """Calcula target adaptativo (15%-85%) baseado no regime de mercado."""
+    if regime not in MARKET_REGIMES:
+        regime = 'NEUTRAL'
+    
+    config = MARKET_REGIMES[regime]
+    target_pct = (config['target_min'] + config['target_max']) / 2
+    
+    if direcao == 'LONG':
+        return preco_atual * (1.0 + target_pct)
+    else:
+        return preco_atual * (1.0 - target_pct)
+
+
+async def carregar_multiframe_data(ativo, timeframes=['5m', '1h', '4h', '1d']):
+    """Carrega dados multi-timeframe para análise integrada."""
+    data_by_tf = {}
+    try:
+        for tf in timeframes:
+            try:
+                candles = await exchange_ws.watch_ohlcv(ativo, timeframe=tf, limit=100)
+                if candles:
+                    df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    data_by_tf[tf] = df
+            except Exception:
+                pass
+        multiframe_cache[ativo] = data_by_tf
+        return data_by_tf
+    except Exception:
+        return {}
+
+
+def gerar_sinal_ui_black_luxo(ativo, regime, leverage, target, entrada, sl, percentual, direcao, checkpoints):
+    """Gera estrutura de sinal em tempo real para Black Luxo UI."""
+    return {
+        'ativo': ativo,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'regime_mercado': regime,
+        'leverage_dinamico': leverage,
+        'target_adaptativo': round(target, 4),
+        'entrada': round(entrada, 4),
+        'sl': round(sl, 4),
+        'convergencia_pct': percentual,
+        'direcao_trade': direcao,
+        'checkpoints_status': checkpoints,
+        'status_geral': 'PRONTO' if percentual == 100 else 'AGUARDANDO',
+        'confianca_sinal': min(100, percentual + (leverage // 5)),  # confidence boost por leverage
+    }
+
 
 def gerar_html_neon_template(titulo, subtitulo, cor_neon, paridade, direcao, vol, adx, entrada, tp, sl, nota_rodape, extras_usdt=""):
     return f"""
@@ -276,6 +421,11 @@ def executar_lote_nas_apis(ativo, direcao, preco_ent, sl, tp, atr_atual):
     for cli in assinantes:
         status_api_binance = "Sincronizado"
         qnt_estimada = calcular_lote_blindado_2pct(1000.0, preco_ent, atr_atual)
+
+        if estatisticas_diarias_ram.get('operacoes', 0) >= FBQ_HIGH_FREQUENCY['daily_trade_cap']:
+            status_api_binance = "Recusado (Limite Diário de 60 Operações Atendido)"
+            relatorio_adm += f" {cli.get('nome', 'Cliente')}: Limite Diário Alcançado\n"
+            continue
         
         # 🛡️ GRAVAÇÃO IMEDIATA: Registra ordem pendente no Supabase
         try:
@@ -294,8 +444,8 @@ def executar_lote_nas_apis(ativo, direcao, preco_ent, sl, tp, atr_atual):
             pass
 
         try:
-            if contar_posicoes_abertas_supabase(cli['id']) >= 6:
-                status_api_binance = "Recusado (Limite Máximo de 6 Posições)"
+            if contar_posicoes_abertas_supabase(cli['id']) >= FBQ_HIGH_FREQUENCY['max_parallel_positions']:
+                status_api_binance = f"Recusado (Limite Máximo de {FBQ_HIGH_FREQUENCY['max_parallel_positions']} Posições)"
                 raise ValueError("Limite Excedido")
 
             cli_exchange = build_binance_demo_exchange(
@@ -321,6 +471,7 @@ def executar_lote_nas_apis(ativo, direcao, preco_ent, sl, tp, atr_atual):
             cli_exchange.create_order(ativo_limpo, 'TAKE_PROFIT_MARKET', side_out, qnt_estimada, params={'stopPrice': tp})
             
             status_api_binance = "Aceito (Sincronizado via API)"
+            estatisticas_diarias_ram['operacoes'] = estatisticas_diarias_ram.get('operacoes', 0) + 1
             relatorio_adm += f" {cli.get('nome', 'Cliente')}: Sincronizado com Sucesso\n"
             
         except Exception as err_api:
@@ -334,10 +485,11 @@ def executar_lote_nas_apis(ativo, direcao, preco_ent, sl, tp, atr_atual):
         except Exception:
             pass
 
-        # Trava posição em memória RAM
-        trades_ativos_ram[ativo_limpo] = {
-            "entrada": preco_ent, "tp": tp, "sl": sl, "sl_original": sl, "dir": direcao, 
-            "qnt": qnt_estimada, "inicio": datetime.now(), "be_ativado": False
+# Store position in RAM with dynamic parameters
+            trades_ativos_ram[ativo_limpo] = {
+                "entrada": preco_ent, "tp": tp, "sl": sl, "sl_original": sl, "dir": direcao, 
+                "qnt": qnt_estimada, "inicio": datetime.now(), "be_ativado": False,
+                "leverage": leverage_dinamico, "regime": regime
         }
 
         html_extras_100 = f"""
@@ -514,14 +666,22 @@ def escanear_mercado_cripto():
             elif score_total >= 2: percentual = 50
             elif score_total >= 1: percentual = 25
 
-            direcao_trade = "LONG" if tendencia_btc == "ALTA" else "SHORT"
+            # Market regime detection for dynamic parameters
+            regime = detectar_regime_mercado(df, ativo)
+            volatilidade_relativa = atr_val / (preco_atual * 0.01)  # ATR as % of price
             
+            # Dynamic leverage and adaptive targets
+            leverage_dinamico = calcular_leverage_dinamico(regime, volatilidade_relativa)
+            direcao_trade = "LONG" if tendencia_btc == "ALTA" else "SHORT"
+            tp = calcular_alvo_adaptativo(regime, preco_atual, direcao_trade)
+            
+            # Dynamic stop loss based on regime and leverage
+            regime_config = MARKET_REGIMES.get(regime, MARKET_REGIMES['NEUTRAL'])
+            sl_pct = FBQ_HIGH_FREQUENCY['loss_protection_pct'] * (1.0 - (leverage_dinamico - 5) / 45.0 * 0.3)
             if direcao_trade == "LONG":
-                tp = preco_atual + (atr_val * 2.0)
-                sl = preco_atual - (atr_val * 1.0)
+                sl = preco_atual * (1.0 - sl_pct)
             else:
-                tp = preco_atual - (atr_val * 2.0)
-                sl = preco_atual + (atr_val * 1.0)
+                sl = preco_atual * (1.0 + sl_pct)
 
             status_txt = f"P: {preco_atual:.4f} | TP: {tp:.4f} | SL: {sl:.4f}"
             if ativo_limpo in trades_ativos_ram:
@@ -555,27 +715,36 @@ def escanear_mercado_cripto():
             # ----------------------------------------------------------------------
             # 5. PAYLOAD COMPLETO (SINAIS + METRICAS NUMÉRICAS PARA MÉTRICAS DO PAINEL)
             # ----------------------------------------------------------------------
+            # Checkpoints structure for Black Luxo UI
+            checkpoints_dict = {
+                'ema': c_ema,
+                'bollinger': c_bb,
+                'rsi': c_rsi,
+                'macd': c_macd,
+                'ao': c_ao,
+                'cci': c_cci,
+                'pinbar': c_pinbar,
+                'engolfo': c_engolfo,
+                'inside': c_inside,
+                'orderblock': c_orderblock,
+            }
+            
+            # Main real-time payload for dashboard
             payload_realtime = {
                 "ativo": ativo_limpo,
                 "tendencia_macro": f"MACRO {tendencia_btc}",
                 "percentual": str(percentual),
                 "score_total": score_total,
-                "volume_razao": f"{volume_razao_calc:.2f}",  # <--- AGORA DINÂMICO
+                "volume_razao": f"{volume_razao_calc:.2f}",
+                "regime_mercado": regime,
+                "leverage_dinamico": leverage_dinamico,
+                "target_adaptativo": round(tp, 4),
                 "status_texto": status_txt,
                 
                 # Checkpoints de Status
-                "c_ema": c_ema,
-                "c_bb": c_bb,
-                "c_rsi": c_rsi,
-                "c_macd": c_macd,
-                "c_ao": c_ao,
-                "c_cci": c_cci,
-                "c_pinbar": c_pinbar,
-                "c_engolfo": c_engolfo,
-                "c_inside": c_inside,
-                "c_orderblock": c_orderblock,
+                "checkpoints": checkpoints_dict,
 
-                # Valores Numéricos Brutos (Alimentam Réguas, Termômetros e Telemetria)
+                # Valores Numéricos Brutos
                 "preco_atual": round(preco_atual, 4),
                 "rsi_val": round(rsi_val, 2),
                 "cci_val": round(cci_val, 2),
@@ -587,8 +756,25 @@ def escanear_mercado_cripto():
                 "tp": round(tp, 4),
                 "sl": round(sl, 4)
             }
+            
+            # Black Luxo UI signal generation
+            sinal_ui = gerar_sinal_ui_black_luxo(
+                ativo_limpo, regime, leverage_dinamico, tp, preco_atual, sl,
+                percentual, direcao_trade, checkpoints_dict
+            )
 
             atualizar_painel_realtime(payload_realtime)
+            
+            # Also push UI signal to dashboard
+            try:
+                url_ui_signal = f"{SUPABASE_URL_CLEAN}/rest/v1/painel_realtime"
+                requests.post(url_ui_signal, json={'ativo': ativo_limpo, 'ui_signal': sinal_ui}, 
+                             headers=HEADERS_SUPABASE, timeout=5)
+            except Exception:
+                pass
+
+            if ativo_limpo in trades_ativos_ram:
+                atualizar_break_even_cognitivo(ativo_limpo, direcao_trade, preco_atual, trades_ativos_ram[ativo_limpo]['entrada'])
 
             if percentual == 100 and ativo_limpo not in trades_ativos_ram:
                 executar_lote_nas_apis(ativo_limpo, direcao_trade, preco_atual, sl, tp, atr_val)
@@ -606,7 +792,7 @@ async def loop_varredura_continua():
             escanear_mercado_cripto()
         except Exception as e:
             print(f"[-] Erro na varredura: {e}")
-        await asyncio.sleep(5)
+        await asyncio.sleep(FBQ_HIGH_FREQUENCY['scan_interval_seconds'])
 
 async def main():
     print("[+] Inicializando Motor Quântico FBQ v9.5 PRO...")
