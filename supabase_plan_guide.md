@@ -253,7 +253,7 @@ Auditoria do fluxo atual no repositório: o formulário em `templates/monitorame
 
 #### Ajuste solicitado para `client_exchange_credentials`
 
-O script abaixo não apaga nem altera valores existentes. Ele aborta sem fazer a migração se encontrar `user_slug` nulo ou duplicado. Execute somente depois de confirmar que todos os acessos a esta tabela passam pelo backend e que `SUPABASE_KEY` no servidor é a chave `service_role`; não use essa chave no navegador. Sem isso, o `REVOKE` pode interromper acessos diretos existentes.
+O script abaixo não apaga nem altera valores existentes. Ele aborta sem fazer a migração se encontrar `user_slug` nulo ou duplicado. Execute somente depois de confirmar que todos os acessos a esta tabela passam pelo backend e que `SUPABASE_SERVICE_ROLE_KEY` no servidor contém a chave `service_role`; o backend prioriza essa variável e mantém `SUPABASE_KEY` como fallback. Nunca use a chave `service_role` no navegador. Sem isso, o `REVOKE` pode interromper acessos diretos existentes.
 
 ```sql
 BEGIN;
@@ -951,7 +951,9 @@ Com essas proteções, o modo de teste não depende de DNS/Binance para continua
 
 O schema colado revelou três incompatibilidades: `user_subscriptions_v2` não lista `monthly_fee`; `fbq_hybrid_orders` não lista `whale_pulse_status` nem `whale_pulse_triggered`; e `investor_performance_ledgers` é um resumo por `user_slug`, incompatível com os eventos por `assinante_id` que o engine tenta ler/gravar. O código foi direcionado para uma tabela nova de eventos, preservando o resumo existente. A latência WhalePulse também foi ajustada no código para inteiro, como o tipo real da coluna.
 
-Antes de executar, faça backup e confirme que `SUPABASE_KEY` no servidor é `service_role`. A migração aborta diante de duplicatas/nulos nos conflict targets e de assinaturas órfãs; ela não apaga nem corrige registros automaticamente. Revise os dados indicados pelo erro antes de tentar novamente.
+**BLOQUEIO ATUAL — NÃO EXECUTAR AINDA:** a claim da variável local `SUPABASE_KEY` foi verificada sem revelar o valor e é `anon`. O backend já prioriza `SUPABASE_SERVICE_ROLE_KEY` quando configurada, mas ela precisa ser definida localmente antes da migração. Os grants desta seção restringem tabelas protegidas ao `service_role` e bloqueariam o app se ele continuar usando somente a chave `anon`.
+
+Antes de executar, faça backup, configure `SUPABASE_SERVICE_ROLE_KEY` apenas no `.env` local do servidor (nunca no frontend nem em mensagens), reinicie o backend e confirme que as chamadas de leitura funcionam. A migração aborta diante de duplicatas/nulos nos conflict targets e de assinaturas órfãs; ela não apaga nem corrige registros automaticamente. Revise os dados indicados pelo erro antes de tentar novamente.
 
 ```sql
 BEGIN;
@@ -960,6 +962,32 @@ ALTER TABLE public.user_subscriptions_v2
   ADD COLUMN IF NOT EXISTS monthly_fee numeric(12,2),
   ALTER COLUMN updated_at SET DEFAULT now();
 
+ALTER TABLE public.user_profiles
+  ALTER COLUMN created_at SET DEFAULT now();
+ALTER TABLE public.marketing_campaigns
+  ALTER COLUMN created_at SET DEFAULT now();
+ALTER TABLE public.marketing_coupons
+  ALTER COLUMN created_at SET DEFAULT now();
+ALTER TABLE public.whalepulse_mempool_signals
+  ALTER COLUMN created_at SET DEFAULT now();
+
+CREATE OR REPLACE FUNCTION public.touch_user_subscriptions_v2_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_user_subscriptions_v2_updated_at
+  ON public.user_subscriptions_v2;
+CREATE TRIGGER trg_user_subscriptions_v2_updated_at
+  BEFORE UPDATE ON public.user_subscriptions_v2
+  FOR EACH ROW
+  EXECUTE FUNCTION public.touch_user_subscriptions_v2_updated_at();
+
 ALTER TABLE public.fbq_hybrid_orders
   ADD COLUMN IF NOT EXISTS whale_pulse_status text DEFAULT 'SCANNING',
   ADD COLUMN IF NOT EXISTS whale_pulse_triggered boolean NOT NULL DEFAULT false;
@@ -967,6 +995,36 @@ ALTER TABLE public.fbq_hybrid_orders
 ALTER TABLE public.client_exchange_credentials ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.client_exchange_credentials FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.client_exchange_credentials TO service_role;
+
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_subscriptions_v2 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.marketing_campaigns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.marketing_coupons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fbq_hybrid_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.investor_performance_ledgers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.scanner_telemetry ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.scanner_test_telemetry ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.whalepulse_mempool_signals ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.user_profiles, public.user_subscriptions_v2,
+  public.marketing_campaigns, public.marketing_coupons,
+  public.fbq_hybrid_orders, public.investor_performance_ledgers,
+  public.scanner_telemetry, public.scanner_test_telemetry,
+  public.whalepulse_mempool_signals
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.painel_realtime, public.view_active_subscriptions
+  FROM PUBLIC, anon, authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_profiles TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_subscriptions_v2 TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.marketing_campaigns TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.marketing_coupons TO service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.fbq_hybrid_orders TO service_role;
+GRANT SELECT ON TABLE public.investor_performance_ledgers TO service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.scanner_telemetry TO service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.scanner_test_telemetry TO service_role;
+GRANT SELECT, INSERT ON TABLE public.whalepulse_mempool_signals TO service_role;
+GRANT SELECT ON TABLE public.painel_realtime, public.view_active_subscriptions TO service_role;
 
 CREATE TABLE IF NOT EXISTS public.investor_performance_ledger_events (
   id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -1183,7 +1241,7 @@ Portanto, a fiação atual separa telemetria/mercado em `fbq_hybrid_orders`, sal
 
 ## Pendências de confirmação
 
-- Confirmar o role de `SUPABASE_KEY` no servidor antes de aplicar os REVOKEs; deve ser `service_role` para os endpoints de backend que acessam tabelas protegidas.
+- Configurar `SUPABASE_SERVICE_ROLE_KEY` localmente e confirmar o acesso de backend antes de aplicar os REVOKEs; a `SUPABASE_KEY` atual tem role `anon`.
 - Colar os resultados de constraints/índices, RLS/grants e definições das views em `view_apis_docs.md`.
 - Confirmar se `assinantes` e `historico_trades` ainda existem e se continuam necessários ao modo de execução escolhido.
 - Só depois da migração e da validação de REST atualizar este status para aplicado.
